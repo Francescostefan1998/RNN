@@ -84,3 +84,61 @@ rnn_hidden_size = 512
 torch.manual_seed(1)
 model = RNN(vocab_size, embed_dim, rnn_hidden_size)
 print(model)
+
+loss_fn = nn.CrossEntropyLoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
+num_epochs = 50
+torch.manual_seed(1)
+for epoch in range(num_epochs):
+    hidden, cell = model.init_hidden(batch_size)
+    seq_batch, target_batch = next(iter(seq_dl))
+    optimizer.zero_grad()
+    loss = 0
+    for c in range(seq_length):
+        pred, hidden, cell = model(seq_batch[:, c], hidden, cell)
+        loss += loss_fn(pred, target_batch[:, c])
+    loss.backward()
+    optimizer.step()
+    loss = loss.item()/seq_length
+    if epoch % 10 == 0:
+        print(f'Epoch {epoch} loss: {loss:.4f}')
+
+
+# Evaluation phase
+from torch.distributions.categorical import Categorical
+torch.manual_seed(1)
+logits = torch.tensor([[1.0, 1.0, 1.0]])
+print('Probabilities:', nn.functional.softmax(logits, dim=1).numpy()[0])
+m = Categorical(logits=logits)
+samples = m.sample((10,))
+print(samples.numpy())
+
+torch.manual_seed(1)
+logits = torch.tensor([[1.0, 1.0, 3.0]])
+print('Probabilities:', nn.functional.softmax(logits, dim=1).numpy()[0])
+m = Categorical(logits=logits)
+samples = m.sample((10,))
+print(samples.numpy())
+
+def sample(model, starting_str, len_generated_text = 500, scale_factor=1.0):
+    encoded_input = torch.tensor([char2int[s] for s in starting_str])
+    encoded_input = torch.reshape(encoded_input, (1, -1))
+    generated_str = starting_str
+    model.eval()
+    hidden, cell = model.init_hidden(1)
+    for c in range(len(starting_str)-1):
+        _, hidden, cell = model(encoded_input[:, c].view(1), hidden, cell)
+
+    last_char = encoded_input[:, -1]
+    for i in range(len_generated_text):
+        logits, hidden, cell = model(last_char.view(1), hidden, cell)
+        logits = torch.squeeze(logits, 0)
+        scaled_logits = logits * scale_factor
+        m = Categorical(logits=scaled_logits)
+        last_char = m.sample()
+        generated_str += str(char_array[last_char])
+
+    return generated_str
+
+torch.manual_seed(1)
+print(sample(model, starting_str='The Island'))
